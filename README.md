@@ -40,7 +40,7 @@ python forecast.py
 ```
 
 The script downloads the dataset automatically on first run (~13.5 MB zip,
-~70,000 rows) from Google's public TensorFlow datasets bucket, and caches it
+~420,000 rows) from Google's public TensorFlow datasets bucket, and caches it
 in `data/`. No account or API key needed.
 
 Training on the full dataset (15 epochs, both models) takes roughly:
