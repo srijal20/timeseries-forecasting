@@ -22,8 +22,9 @@ The Transformer edges the LSTM slightly, but they are effectively tied - a
 realistic outcome, since Transformers usually need larger datasets to
 clearly outperform recurrent models.
 
-**Forecast error vs. horizon** - the deep models stay far below the naive
-baseline at every step, and the gap grows with the forecast horizon:
+**Forecast error vs. horizon** - at the first step (10 minutes ahead) the
+naive baseline is as good as the deep models; from step 2 on the deep models
+are clearly better, and the gap grows with the forecast horizon:
 
 ![RMSE vs horizon](results/rmse_vs_horizon.png)
 
