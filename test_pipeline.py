@@ -1,7 +1,7 @@
 """
 Sanity test: runs the full pipeline (windowing, models, training loop, eval, plots)
 on small SYNTHETIC data with the same shape as the real Jena Climate dataset,
-to catch bugs before running on the real ~70k-row dataset (which needs internet
+to catch bugs before running on the real ~420k-row dataset (which needs internet
 access to download).
 """
 import numpy as np
