@@ -66,6 +66,10 @@ the top of `forecast.py`.
    Transformer encoder with multi-head self-attention and positional encoding.
 5. **Evaluation**: RMSE and MAE in real degrees Celsius, reported per forecast
    step so you can see how error grows with the horizon.
+6. **Training curves**: the training and validation loss of every epoch is
+   saved to `results/loss_history_<model>.csv` and drawn in
+   `results/loss_curves.png`; the epoch with the lowest validation loss is the
+   one kept.
 
 ## Files
 
@@ -73,7 +77,7 @@ the top of `forecast.py`.
 forecast.py          Main training / evaluation script
 test_pipeline.py     Smoke test on synthetic data (fast sanity check)
 requirements.txt     Dependencies
-results/             Generated plots (committed for display above)
+results/             Generated plots and per-epoch loss CSVs (committed)
 data/                Dataset cache (git-ignored, auto-downloaded)
 *.pt                 Trained model weights (git-ignored, regenerated on run)
 ```
