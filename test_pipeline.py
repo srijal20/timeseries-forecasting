@@ -4,6 +4,9 @@ on small SYNTHETIC data with the same shape as the real Jena Climate dataset,
 to catch bugs before running on the real ~420k-row dataset (which needs internet
 access to download).
 """
+import os
+import tempfile
+
 import numpy as np
 import pandas as pd
 import torch
@@ -17,6 +20,11 @@ fc.HORIZON = 6
 fc.BATCH_SIZE = 16
 fc.EPOCHS = 2
 fc.HIDDEN_SIZE = 8
+
+# Write all smoke-test outputs (CSVs, plots) to a throwaway folder,
+# so they never mix with the real results/ folder.
+OUT_DIR = tempfile.mkdtemp(prefix="forecast_smoke_")
+fc.RESULTS_DIR = OUT_DIR
 
 # --- Build synthetic dataframe mimicking Jena Climate's raw columns ---
 n = 2000
@@ -80,7 +88,10 @@ lstm = fc.LSTMForecaster(n_features, fc.HIDDEN_SIZE, fc.HORIZON)
 out = lstm(x0.unsqueeze(0))
 print("LSTM forward output shape:", out.shape)
 assert out.shape == (1, fc.HORIZON)
-lstm = fc.train_model(lstm, train_loader, val_loader, fc.EPOCHS, fc.LEARNING_RATE, "lstm_test")
+lstm, hist_lstm = fc.train_model(lstm, train_loader, val_loader, fc.EPOCHS, fc.LEARNING_RATE, "lstm_test")
+assert len(hist_lstm) == fc.EPOCHS
+assert set(hist_lstm[0]) == {"epoch", "train_mse", "val_mse"}
+fc.save_history(hist_lstm, "lstm_test", std_target)
 preds_lstm, trues_lstm, rmse_lstm, _ = fc.evaluate(lstm, test_loader, std_target, mean_target, "LSTM_test")
 print("LSTM RMSE per step:", rmse_lstm)
 
@@ -89,13 +100,19 @@ transformer = fc.TransformerForecaster(n_features, d_model=fc.HIDDEN_SIZE, horiz
 out_t = transformer(x0.unsqueeze(0))
 print("Transformer forward output shape:", out_t.shape)
 assert out_t.shape == (1, fc.HORIZON)
-transformer = fc.train_model(transformer, train_loader, val_loader, fc.EPOCHS, fc.LEARNING_RATE, "transformer_test")
+transformer, hist_tf = fc.train_model(transformer, train_loader, val_loader, fc.EPOCHS, fc.LEARNING_RATE, "transformer_test")
+assert len(hist_tf) == fc.EPOCHS
+fc.save_history(hist_tf, "transformer_test", std_target)
 preds_tf, trues_tf, rmse_tf, _ = fc.evaluate(transformer, test_loader, std_target, mean_target, "Transformer_test")
 print("Transformer RMSE per step:", rmse_tf)
 
 # --- Plots ---
+fc.plot_loss_curves({"LSTM": hist_lstm, "Transformer": hist_tf},
+                     out_path=os.path.join(OUT_DIR, "test_loss_curves.png"))
 fc.plot_horizon_error({"Naive": rmse_naive, "LSTM": rmse_lstm, "Transformer": rmse_tf},
-                       out_path="test_rmse_vs_horizon.png")
-fc.plot_sample_forecast(preds_lstm, trues_lstm, sample_idx=5, out_path="test_sample_forecast.png")
+                       out_path=os.path.join(OUT_DIR, "test_rmse_vs_horizon.png"))
+fc.plot_sample_forecast(preds_lstm, trues_lstm, sample_idx=5,
+                         out_path=os.path.join(OUT_DIR, "test_sample_forecast.png"))
+print("Smoke-test outputs written to:", OUT_DIR)
 
 print("\nALL SMOKE TESTS PASSED.")

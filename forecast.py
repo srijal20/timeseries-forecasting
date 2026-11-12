@@ -15,7 +15,7 @@ This script:
        - LSTM
        - A lightweight Transformer encoder
   5. Reports RMSE / MAE per model, per forecast horizon
-  6. Saves prediction-vs-actual plots
+  6. Saves training/validation loss curves and prediction-vs-actual plots
 
 Run:
     pip install -r requirements.txt
@@ -234,11 +234,18 @@ class TransformerForecaster(nn.Module):
 # 6. Training / evaluation
 # ----------------------------------------------------------------------------
 def train_model(model, train_loader, val_loader, epochs, lr, name):
+    """Trains the model and returns (best model, history).
+
+    history is a list with one dict per epoch:
+    {"epoch", "train_mse", "val_mse"} (MSE in normalized units).
+    """
     model.to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
 
     best_val = float("inf")
+    best_epoch = 0
+    history = []
     n_batches = len(train_loader)
     for epoch in range(1, epochs + 1):
         model.train()
@@ -271,12 +278,30 @@ def train_model(model, train_loader, val_loader, epochs, lr, name):
         val_loss /= len(val_loader.dataset)
 
         print(f"[{name}] epoch {epoch:02d}  train_mse={train_loss:.4f}  val_mse={val_loss:.4f}")
+        history.append({"epoch": epoch, "train_mse": train_loss, "val_mse": val_loss})
         if val_loss < best_val:
             best_val = val_loss
+            best_epoch = epoch
             torch.save(model.state_dict(), f"best_{name}.pt")
 
+    print(f"[{name}] best epoch: {best_epoch} (val_mse={best_val:.4f})")
     model.load_state_dict(torch.load(f"best_{name}.pt"))
-    return model
+    return model, history
+
+
+def save_history(history, name, std_target):
+    """Saves the per-epoch losses to results/loss_history_<name>.csv.
+
+    Adds RMSE in degC next to the normalized MSE, so the numbers can be
+    compared with the test RMSE: rmse_degC = sqrt(mse) * std of temperature.
+    """
+    df = pd.DataFrame(history)
+    df["train_rmse_degC"] = np.sqrt(df["train_mse"]) * std_target
+    df["val_rmse_degC"] = np.sqrt(df["val_mse"]) * std_target
+    df["is_best"] = df["val_mse"] == df["val_mse"].min()
+    path = os.path.join(RESULTS_DIR, f"loss_history_{name}.csv")
+    df.to_csv(path, index=False)
+    print(f"Saved: {path}")
 
 
 def evaluate(model, loader, std_target, mean_target, name):
@@ -336,6 +361,38 @@ def plot_horizon_error(results: dict, out_path="rmse_vs_horizon.png"):
     print(f"Saved: {out_path}")
 
 
+def plot_loss_curves(histories: dict, out_path="loss_curves.png"):
+    """One panel per model: training and validation MSE per epoch.
+
+    The panels share the y-axis so the two models can be compared directly,
+    and the epoch with the lowest validation loss (the one kept) is marked.
+    """
+    fig, axes = plt.subplots(1, len(histories), figsize=(5 * len(histories), 4.5),
+                             sharey=True, squeeze=False)
+    for ax, (name, history) in zip(axes[0], histories.items()):
+        epochs = [h["epoch"] for h in history]
+        train = [h["train_mse"] for h in history]
+        val = [h["val_mse"] for h in history]
+        best = epochs[int(np.argmin(val))]
+
+        ax.plot(epochs, train, color="#1f77b4", linestyle="-", marker="o", label="Training")
+        ax.plot(epochs, val, color="#ff7f0e", linestyle="--", marker="s", label="Validation")
+        ax.axvline(best, color="gray", linestyle=":", linewidth=1)
+        ax.annotate(f"best epoch {best}", xy=(best, min(val)), xytext=(6, 14),
+                    textcoords="offset points", fontsize=9, color="dimgray")
+        ax.set_title(name)
+        ax.set_xlabel("Epoch")
+        ax.set_xticks(epochs)
+        ax.grid(alpha=0.3)
+        ax.legend()
+    axes[0][0].set_ylabel("MSE (normalized units)")
+    fig.suptitle("Training and validation loss")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved: {out_path}")
+
+
 def plot_sample_forecast(preds, trues, sample_idx=0, out_path="sample_forecast.png"):
     plt.figure(figsize=(8, 5))
     plt.plot(trues[sample_idx], label="Actual", marker="o")
@@ -384,17 +441,21 @@ def main():
 
     # --- LSTM ---
     lstm = LSTMForecaster(n_features, HIDDEN_SIZE, HORIZON)
-    lstm = train_model(lstm, train_loader, val_loader, EPOCHS, LEARNING_RATE, "lstm")
+    lstm, hist_lstm = train_model(lstm, train_loader, val_loader, EPOCHS, LEARNING_RATE, "lstm")
+    save_history(hist_lstm, "lstm", std_target)
     preds_lstm, trues_lstm, rmse_lstm, _ = evaluate(lstm, test_loader, std_target, mean_target, "LSTM")
     results_rmse["LSTM"] = rmse_lstm
 
     # --- Transformer ---
     transformer = TransformerForecaster(n_features, d_model=HIDDEN_SIZE, horizon=HORIZON)
-    transformer = train_model(transformer, train_loader, val_loader, EPOCHS, LEARNING_RATE, "transformer")
+    transformer, hist_tf = train_model(transformer, train_loader, val_loader, EPOCHS, LEARNING_RATE, "transformer")
+    save_history(hist_tf, "transformer", std_target)
     preds_tf, trues_tf, rmse_tf, _ = evaluate(transformer, test_loader, std_target, mean_target, "Transformer")
     results_rmse["Transformer"] = rmse_tf
 
     # --- Plots ---
+    plot_loss_curves({"LSTM": hist_lstm, "Transformer": hist_tf},
+                     out_path=os.path.join(RESULTS_DIR, "loss_curves.png"))
     plot_horizon_error(results_rmse, out_path=os.path.join(RESULTS_DIR, "rmse_vs_horizon.png"))
     plot_sample_forecast(preds_lstm, trues_lstm, sample_idx=100, out_path=os.path.join(RESULTS_DIR, "sample_forecast_lstm.png"))
     plot_sample_forecast(preds_tf, trues_tf, sample_idx=100, out_path=os.path.join(RESULTS_DIR, "sample_forecast_transformer.png"))
