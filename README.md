@@ -33,6 +33,18 @@ are clearly better, and the gap grows with the forecast horizon:
 ![LSTM sample forecast](results/sample_forecast_lstm.png)
 ![Transformer sample forecast](results/sample_forecast_transformer.png)
 
+**Training curves** (training and validation loss after every epoch):
+
+![Training and validation loss](results/loss_curves.png)
+
+Both models reach their lowest validation loss at epoch 5. After that the
+training loss keeps falling but the validation loss slowly rises, so the
+models start to overfit. The script keeps the weights from the epoch with the
+lowest validation loss, so the test results above come from the epoch 5
+models. In epoch 1 the validation loss is below the training loss because the
+training loss is averaged over the whole epoch while the model is still
+improving, and dropout is active only during training.
+
 ## Setup
 
 ```bash
@@ -44,9 +56,10 @@ The script downloads the dataset automatically on first run (~13.5 MB zip,
 ~420,000 rows) from Google's public TensorFlow datasets bucket, and caches it
 in `data/`. No account or API key needed.
 
-Training on the full dataset (15 epochs, both models) takes roughly:
-- **CPU only**: ~4 minutes per epoch, so ~1-2 hours total for both models
-- **GPU**: 5-10 minutes total
+Training on the full dataset (15 epochs, both models) is slow on a CPU. In
+the full run on a laptop CPU, the LSTM took about 5.5 minutes per epoch and
+the Transformer about 32 minutes per epoch, about 9 hours 20 minutes in total.
+A GPU is much faster.
 
 For a fast first run to confirm everything works, lower `EPOCHS` to 2-3 at
 the top of `forecast.py`.
@@ -84,6 +97,8 @@ data/                Dataset cache (git-ignored, auto-downloaded)
 
 ## Extending this further
 
+- Early stopping with patience: validation loss stops improving after epoch 5,
+  so stopping after 3 epochs without improvement would roughly halve training time
 - Multi-target forecasting (predict several variables at once)
 - Attention-weight visualization for the Transformer
 - Quantile/probabilistic forecasting instead of point forecasts
