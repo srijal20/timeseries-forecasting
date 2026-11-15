@@ -95,6 +95,32 @@ data/                Dataset cache (git-ignored, auto-downloaded)
 *.pt                 Trained model weights (git-ignored, regenerated on run)
 ```
 
+## Challenges and learnings
+
+- **Faulty and repeated data**: duplicate timestamps are dropped and wind
+  speeds of -9999 (a sensor fault code) are clipped to 0, so they cannot
+  distort the scaling statistics.
+- **Circular variables**: wind direction and time of day/year are turned into
+  vector and sine/cosine form, so that nearby physical states are nearby
+  numbers.
+- **No look-ahead**: chronological split, scaling statistics from the training
+  part only, and shuffling only inside the training set.
+- **Memory**: windows are cut from the array on request instead of being
+  stored (storing them would take about 3.2 GB).
+- **Long CPU runs**: `test_pipeline.py` runs the whole pipeline on synthetic
+  data in seconds, to catch bugs before a run of several hours.
+- **Overfitting**: the per-epoch loss curves show both models are best at
+  epoch 5 and overfit after it; the best validation checkpoint is the model
+  that gets tested.
+- **Metric choice**: percentage error (MAPE) is not used. Celsius has no true
+  zero, so temperatures near 0 deg C make MAPE explode (over 46,000% here) and
+  it even ranked the two models in the wrong order. Errors are reported in
+  deg C for every forecast step instead.
+- **Main learning**: going from persistence to a learned model cut the error
+  by about half, while going from the LSTM to the Transformer gained about 3%.
+  Careful data preparation and evaluation mattered more than the network
+  architecture.
+
 ## Extending this further
 
 - Early stopping with patience: validation loss stops improving after epoch 5,
